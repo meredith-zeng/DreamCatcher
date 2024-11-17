@@ -6,7 +6,14 @@ Quickly record your dreams through customized questions, capturing the essence o
 Generating a vivid image of the dream, bringing it to life in a way words alone cannot.💡💎🎥
 
 # How we built it
-Used LangChain for processing, GPT-4o Mini for NLP, Amazon Titan for image generation, and AWS services (EC2, S3, Lambda, DynamoDB) for backend and storage. Next.js was used for the frontend.
+## Generation Model
+Used LangChain for processing, GPT-4o Mini for NLP, Amazon Titan for image generation
+
+## Front End
+Next.js was used for the frontend.
+
+## Back End
+AWS services (EC2, S3, Lambda, DynamoDB) for backend and storage. 
 
 # Challenges we ran into
 - AWS Complexity: We had little prior experience with AWS, and setting up advanced services like Lambda was challenging. The learning curve for AWS services was steep, especially when trying to integrate Lambda for serverless computing.
