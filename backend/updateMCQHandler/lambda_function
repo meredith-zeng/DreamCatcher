@@ -1,0 +1,107 @@
+import json
+import boto3
+import requests
+from botocore.exceptions import BotoCoreError, ClientError
+
+# 初始化资源
+dynamodb = boto3.resource('dynamodb')
+lambda_client = boto3.client('lambda')
+
+mcq_service_url = "http://35.160.154.129:8000/generate_query"
+
+def lambda_handler(event, context):
+    try:
+        # 1. 解析输入数据
+        if isinstance(event.get('body'), str):
+            input_body = json.loads(event['body'])
+        else:
+            input_body = event.get('body', {})
+        print(input_body)
+        dream_id = input_body['dreamId']
+        mcqs = input_body['mcqs']  # mcqs 是问题数组
+
+        # question_answer_table = dynamodb.Table("dream_answer")
+        # question_answer_table.put_item(
+        #     Item = {
+        #         'dream_id': dream_id,
+        #         'answers': mcqs
+        #     }
+        # )
+        prompt_payload = []  # 准备发送给 Prompt_generation 的数据
+
+        DreamInfo_table = dynamodb.Table("dream_info")
+       
+        # 获取 DREAM_INFO 表中的数据
+        # print("FDFSDFS")
+        InfoResponse = DreamInfo_table.get_item(Key={'dream_id': dream_id})
+
+        # 检查是否找到数据
+        if 'Item' not in InfoResponse:
+            raise ValueError(f"No data found for dreamId: {dream_id}")
+
+        dream_info_raw = InfoResponse['Item']['dreamData']
+        print(dream_info_raw)
+        dream_info = json.loads(dream_info_raw)
+        print("log")
+        # 3. 构建发送到 Prompt_generation 的事件
+        prompt_event = {
+            'dreamID': dream_id,
+            'mcqs': mcqs, # 包含每个问题及其答案
+            'dreamData': dream_info
+        }
+        # Make HTTP POST request to the external service
+        print(f"Sending payload to MCQ service: {json.dumps(prompt_event, indent=2)}")
+        response = requests.post(mcq_service_url, json=prompt_event)
+        print(f"MCQ service response status code: {response.status_code}")
+        
+        if response.status_code != 200:
+            raise Exception(f"MCQ service returned error: {response.text}")
+        print("mcq")
+        prompt_result = response.json()
+        
+        if prompt_result.get("status") != "success":
+            raise Exception(f"MCQ service returned failure: {prompt_result.get('errorMessage', 'Unknown error')}")
+        
+        generated_prompt = prompt_result.get("prompt", {})
+        print(generated_prompt)
+        # 5. 保存 dreamID 和 prompt 到新的 PROMPT_TABLE
+        prompt_table = dynamodb.Table("dream_prompt")
+        print(dream_id)
+        prompt_table.put_item(
+            Item={
+                'dream_id': dream_id,
+                'prompt': generated_prompt
+            }
+        )
+
+        # 6. 返回成功消息
+        body = {
+            "success": True,
+            "errorMessage": " ",
+            "prompt": generated_prompt
+        }
+
+        return {
+            "statusCode": 200,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*"
+            },
+            "body": json.dumps(body)
+        }
+
+    except (BotoCoreError, ClientError) as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+    except ValueError as e:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': str(e)})
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
